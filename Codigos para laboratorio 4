@@ -1,0 +1,779 @@
+CODIGO ESP32 
+
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);   // si no funciona, prueba 0x3F
+
+const int PIN_ADC = 34;   // entrada analógica (salida del LM331)
+// I2C: SDA = 21, SCL = 22
+
+const float V_MIN = 1.4;
+const float V_MED = 1.9;
+const float V_MAX = 2.3;
+
+// Si usas divisor de voltaje antes del pin (ej. 10k + 10k), pon 2.0
+const float FACTOR_DIVISOR = 1.0;
+
+void setup() {
+  Serial.begin(115200);
+  analogReadResolution(12);                     // 0-4095
+  analogSetPinAttenuation(PIN_ADC, ADC_11db);   // rango ~0-3.3 V
+
+  Wire.begin(21, 22);
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Sensor capacit.");
+  delay(1000);
+  lcd.clear();
+}
+
+float leerVoltaje() {
+  long suma = 0;
+  for (int i = 0; i < 32; i++) suma += analogRead(PIN_ADC);  // promedio
+  return (suma / 32.0) * 3.3 / 4095.0 * FACTOR_DIVISOR;
+}
+
+void loop() {
+  float v = leerVoltaje();
+
+  // Nivel según los umbrales (solo para mostrar)
+  const char* nivel;
+  if (v < V_MIN)       nivel = "Bajo rango";
+  else if (v < V_MED)  nivel = "Minimo-Medio";
+  else if (v <= V_MAX) nivel = "Medio-Maximo";
+  else                 nivel = "Sobre rango";
+
+  lcd.setCursor(0, 0);
+  lcd.printf("V: %.2f V     ", v);
+  lcd.setCursor(0, 1);
+  lcd.printf("%-16s", nivel);
+
+  Serial.printf("V = %.2f V  (%s)\n", v, nivel);
+  delay(100);
+}
+
+
+
+
+clc;
+clear;
+close all;
+
+%% DATOS EXPERIMENTALES
+
+L = [1 2 3 4 5 6 7 8 9 10 ...
+     11 12 13 14 15 16 17 18 19];
+
+C = [50 55 60 63 61 59 58 56 57 66 ...
+     80 86 89 91 99 102 117 120 121];
+
+
+%% REGRESION LINEAL
+
+p = polyfit(L,C,1);
+
+C_reg = polyval(p,L);
+
+
+%% COEFICIENTE DE DETERMINACION R^2
+
+R2 = 1 - sum((C-C_reg).^2) / ...
+         sum((C-mean(C)).^2);
+
+
+%% SENSIBILIDAD
+
+% Pendiente de la regresion
+sensibilidad = p(1);
+
+
+%% ERROR RESPECTO A LA REGRESION
+
+error = abs(C-C_reg);
+
+% Error promedio
+error_promedio = mean(error);
+
+% Mayor error
+[error_max,indice_max] = max(error);
+
+
+%% PUNTO DE MAYOR ERROR
+
+L_error_max = L(indice_max);
+
+C_error_max = C(indice_max);
+
+C_reg_error_max = C_reg(indice_max);
+
+
+%% ERROR EN PORCENTAJE
+
+% Span de capacitancia
+span = max(C)-min(C);
+
+% Error promedio porcentual
+error_promedio_pct = ...
+    (error_promedio/span)*100;
+
+% Mayor error porcentual
+error_max_pct = ...
+    (error_max/span)*100;
+
+
+%% GRAFICA
+
+figure('Color','white',...
+       'Position',[100 100 1000 650]);
+
+hold on;
+grid on;
+box on;
+
+
+%% DATOS EXPERIMENTALES
+
+plot(L,C,'bo-',...
+    'LineWidth',1.4,...
+    'MarkerSize',6,...
+    'MarkerFaceColor','b');
+
+
+%% REGRESION EXPERIMENTAL
+
+plot(L,C_reg,'b-',...
+    'LineWidth',1.8);
+
+
+%% MAYOR ERROR
+
+% Línea vertical entre el dato experimental
+% y la recta de regresión
+
+plot([L_error_max L_error_max],...
+     [C_error_max C_reg_error_max],...
+     'r-',...
+     'LineWidth',2);
+
+
+% Punto experimental
+
+plot(L_error_max,C_error_max,...
+     'ro',...
+     'MarkerSize',8,...
+     'MarkerFaceColor','white',...
+     'LineWidth',1.5);
+
+
+% Punto correspondiente a la regresión
+
+plot(L_error_max,C_reg_error_max,...
+     'ro',...
+     'MarkerSize',6,...
+     'MarkerFaceColor','r');
+
+
+%% TEXTO DEL MAYOR ERROR
+
+text(L_error_max+0.3,...
+     (C_error_max+C_reg_error_max)/2,...
+     sprintf('Mayor error = %.2f pF',error_max),...
+     'FontSize',8,...
+     'Color','r',...
+     'FontWeight','bold');
+
+
+%% EJES
+
+xlabel('Longitud (cm)',...
+       'FontSize',10);
+
+ylabel('Capacitancia (pF)',...
+       'FontSize',10);
+
+title('Longitud vs Capacitancia',...
+      'FontSize',12);
+
+
+%% LEYENDA
+
+legend('Datos experimentales',...
+       'Regresión experimental',...
+       'Mayor error',...
+       'Location','southeast',...
+       'FontSize',8);
+
+
+%% INFORMACION EN LA ESQUINA SUPERIOR DERECHA
+
+texto = {
+    sprintf('Experimental: C = %.5fL %+.4f',...
+            p(1),p(2))
+    sprintf('R^2 = %.6f',R2)
+    sprintf('Sensibilidad = %.5f pF/cm',sensibilidad)
+    ''
+    sprintf('Error promedio = %.2f pF',...
+            error_promedio)
+    sprintf('Error promedio = %.2f %%',...
+            error_promedio_pct)
+    sprintf('Mayor error = %.2f pF',...
+            error_max)
+    sprintf('Mayor error = %.2f %%',...
+            error_max_pct)
+    sprintf('L = %.0f cm',...
+            L_error_max)
+    };
+
+
+%% CAJA SUPERIOR DERECHA
+
+annotation('textbox',...
+    [0.58 0.65 0.34 0.22],...
+    'String',texto,...
+    'FontSize',7.5,...
+    'BackgroundColor','white',...
+    'EdgeColor',[0.45 0.45 0.45],...
+    'LineWidth',0.8,...
+    'FitBoxToText','off',...
+    'VerticalAlignment','top');
+
+
+hold off;
+
+
+%% RESULTADOS EN COMMAND WINDOW
+
+fprintf('\n==========================================\n');
+fprintf('          LONGITUD VS CAPACITANCIA\n');
+fprintf('==========================================\n');
+
+fprintf('\nREGRESION EXPERIMENTAL:\n');
+
+fprintf('C = %.8f L %+.8f\n',...
+        p(1),p(2));
+
+fprintf('\nCOEFICIENTE R^2:\n');
+
+fprintf('R^2 = %.6f\n',R2);
+
+fprintf('\nSENSIBILIDAD:\n');
+
+fprintf('Sensibilidad = %.8f pF/cm\n',...
+        sensibilidad);
+
+fprintf('\nERROR PROMEDIO:\n');
+
+fprintf('%.6f pF\n',error_promedio);
+
+fprintf('%.2f %%\n',error_promedio_pct);
+
+fprintf('\nMAYOR ERROR:\n');
+
+fprintf('%.6f pF\n',error_max);
+
+fprintf('%.2f %%\n',error_max_pct);
+
+fprintf('\nPUNTO DE MAYOR ERROR:\n');
+
+fprintf('Longitud = %.0f cm\n',...
+        L_error_max);
+
+fprintf('Capacitancia experimental = %.3f pF\n',...
+        C_error_max);
+
+fprintf('Capacitancia de regresion = %.3f pF\n',...
+        C_reg_error_max);
+
+fprintf('\n==========================================\n');
+
+
+
+
+clc;
+clear;
+close all;
+
+%% DATOS EXPERIMENTALES - SUBIDA
+
+C = [70 80 86 89 91 99 102 117 120 121];
+
+V = [2.059 1.993 1.910 1.920 1.901 ...
+     1.820 1.838 1.826 1.798 1.787];
+
+
+%% REGRESION LINEAL
+
+p = polyfit(C,V,1);
+
+V_reg = polyval(p,C);
+
+
+%% COEFICIENTE DE DETERMINACION R^2
+
+R2 = 1 - sum((V-V_reg).^2) / ...
+         sum((V-mean(V)).^2);
+
+
+%% SENSIBILIDAD
+
+% La sensibilidad corresponde a la pendiente
+sensibilidad = p(1);
+
+
+%% ERROR RESPECTO A LA REGRESION
+
+error = abs(V-V_reg);
+
+% Error promedio
+error_promedio = mean(error);
+
+% Mayor error
+[error_max,indice_max] = max(error);
+
+% Punto donde ocurre el mayor error
+C_error_max = C(indice_max);
+V_error_max = V(indice_max);
+V_reg_error_max = V_reg(indice_max);
+
+
+%% ERROR EN PORCENTAJE
+
+% Span de los datos
+span = max(V)-min(V);
+
+% Error promedio porcentual
+error_promedio_pct = ...
+    (error_promedio/span)*100;
+
+% Mayor error porcentual
+error_max_pct = ...
+    (error_max/span)*100;
+
+
+%% GRAFICA
+
+figure('Color','white','Position',[100 100 1000 650]);
+
+hold on;
+grid on;
+box on;
+
+
+%% DATOS EXPERIMENTALES
+
+plot(C,V,'bo-',...
+    'LineWidth',1.4,...
+    'MarkerSize',6,...
+    'MarkerFaceColor','b');
+
+
+%% REGRESION EXPERIMENTAL
+
+plot(C,V_reg,'b-',...
+    'LineWidth',1.8);
+
+
+%% MAYOR ERROR
+
+% Línea vertical entre el punto experimental
+% y la recta de regresión
+
+plot([C_error_max C_error_max],...
+     [V_error_max V_reg_error_max],...
+     'r-',...
+     'LineWidth',2);
+
+
+% Punto experimental del mayor error
+
+plot(C_error_max,V_error_max,...
+     'ro',...
+     'MarkerSize',8,...
+     'MarkerFaceColor','white',...
+     'LineWidth',1.5);
+
+
+% Punto correspondiente sobre la regresión
+
+plot(C_error_max,V_reg_error_max,...
+     'ro',...
+     'MarkerSize',6,...
+     'MarkerFaceColor','r');
+
+
+%% TEXTO DEL MAYOR ERROR
+
+text(C_error_max+1.5,...
+     (V_error_max+V_reg_error_max)/2,...
+     sprintf('Mayor error = %.2f mV',error_max*1000),...
+     'FontSize',8,...
+     'Color','r',...
+     'FontWeight','bold');
+
+
+%% EJES
+
+xlabel('Capacitancia (pF)',...
+       'FontSize',10);
+
+ylabel('Voltaje (V)',...
+       'FontSize',10);
+
+title('Linealización del sensor capacitivo - Subida',...
+      'FontSize',12);
+
+
+%% LEYENDA
+
+legend('Datos experimentales',...
+       'Regresión experimental',...
+       'Mayor error',...
+       'Location','southwest',...
+       'FontSize',8);
+
+
+%% INFORMACION EN LA ESQUINA SUPERIOR DERECHA
+
+texto = {
+    sprintf('Experimental: V = %.6fC %+.6f',p(1),p(2))
+    sprintf('R^2 = %.6f',R2)
+    sprintf('Sensibilidad = %.6f V/pF',sensibilidad)
+    ''
+    sprintf('Error promedio = %.2f mV',error_promedio*1000)
+    sprintf('Error promedio = %.2f %%',error_promedio_pct)
+    sprintf('Mayor error = %.2f mV',error_max*1000)
+    sprintf('Mayor error = %.2f %%',error_max_pct)
+    sprintf('C = %.0f pF',C_error_max)
+    };
+
+
+%% CAJA SUPERIOR DERECHA
+
+annotation('textbox',...
+    [0.58 0.65 0.34 0.22],...
+    'String',texto,...
+    'FontSize',7.5,...
+    'BackgroundColor','white',...
+    'EdgeColor',[0.45 0.45 0.45],...
+    'LineWidth',0.8,...
+    'FitBoxToText','off',...
+    'VerticalAlignment','top');
+
+
+hold off;
+
+
+%% RESULTADOS EN COMMAND WINDOW
+
+fprintf('\n==========================================\n');
+fprintf('       LINEALIZACION - SUBIDA\n');
+fprintf('==========================================\n');
+
+fprintf('\nREGRESION EXPERIMENTAL:\n');
+
+fprintf('V = %.8f C %+.8f\n',...
+        p(1),p(2));
+
+fprintf('\nCOEFICIENTE R^2:\n');
+
+fprintf('R^2 = %.6f\n',R2);
+
+fprintf('\nSENSIBILIDAD:\n');
+
+fprintf('Sensibilidad = %.8f V/pF\n',...
+        sensibilidad);
+
+fprintf('\nERROR PROMEDIO:\n');
+
+fprintf('%.6f V\n',error_promedio);
+
+fprintf('%.2f mV\n',error_promedio*1000);
+
+fprintf('%.2f %%\n',error_promedio_pct);
+
+fprintf('\nMAYOR ERROR:\n');
+
+fprintf('%.6f V\n',error_max);
+
+fprintf('%.2f mV\n',error_max*1000);
+
+fprintf('%.2f %%\n',error_max_pct);
+
+fprintf('\nPUNTO DE MAYOR ERROR:\n');
+
+fprintf('Capacitancia = %.0f pF\n',...
+        C_error_max);
+
+fprintf('Voltaje experimental = %.3f V\n',...
+        V_error_max);
+
+fprintf('Voltaje de regresion = %.3f V\n',...
+        V_reg_error_max);
+
+fprintf('\n==========================================\n');
+
+
+
+
+clc;
+clear;
+close all;
+
+%% DATOS
+
+C = [70 80 86 89 91 99 102 117 120 121];
+
+V_subida = [2.059 1.993 1.910 1.920 1.901 ...
+            1.820 1.838 1.826 1.798 1.787];
+
+V_bajada = [2.074 2.007 1.940 1.930 1.923 ...
+            1.830 1.860 1.844 1.820 1.806];
+
+
+%% REGRESIONES
+
+p_subida = polyfit(C,V_subida,1);
+p_bajada = polyfit(C,V_bajada,1);
+
+Vreg_subida = polyval(p_subida,C);
+Vreg_bajada = polyval(p_bajada,C);
+
+
+%% R2
+
+R2_subida = 1 - sum((V_subida-Vreg_subida).^2) / ...
+                sum((V_subida-mean(V_subida)).^2);
+
+R2_bajada = 1 - sum((V_bajada-Vreg_bajada).^2) / ...
+                sum((V_bajada-mean(V_bajada)).^2);
+
+
+%% ERRORES DE LINEALIDAD
+
+error_subida = abs(V_subida-Vreg_subida);
+error_bajada = abs(V_bajada-Vreg_bajada);
+
+error_max_subida = max(error_subida);
+error_max_bajada = max(error_bajada);
+
+span = max([V_subida V_bajada]) - ...
+       min([V_subida V_bajada]);
+
+linealidad_subida = error_max_subida/span*100;
+linealidad_bajada = error_max_bajada/span*100;
+
+
+%% ERRORES PROMEDIO
+
+error_promedio_subida = mean(error_subida);
+error_promedio_bajada = mean(error_bajada);
+
+error_promedio_general = ...
+    mean([error_subida error_bajada]);
+
+error_promedio_general_pct = ...
+    error_promedio_general/span*100;
+
+
+%% HISTERESIS
+
+H = abs(V_bajada-V_subida);
+
+[H_max,indice_max] = max(H);
+
+H_min = min(H);
+H_prom = mean(H);
+
+C_Hmax = C(indice_max);
+V_Hmax_subida = V_subida(indice_max);
+V_Hmax_bajada = V_bajada(indice_max);
+
+H_max_pct = H_max/span*100;
+H_prom_pct = H_prom/span*100;
+
+
+%% SENSIBILIDAD
+
+sensibilidad_subida = p_subida(1);
+sensibilidad_bajada = p_bajada(1);
+
+
+%% GRAFICA
+
+figure('Color','white','Position',[100 100 1000 650]);
+
+hold on;
+grid on;
+box on;
+
+% Datos de subida
+plot(C,V_subida,'bo-',...
+    'LineWidth',1.3,...
+    'MarkerSize',5,...
+    'MarkerFaceColor','b');
+
+% Datos de bajada
+plot(C,V_bajada,'gs-',...
+    'LineWidth',1.3,...
+    'MarkerSize',5,...
+    'MarkerFaceColor','g');
+
+% Regresiones
+plot(C,Vreg_subida,'b--','LineWidth',1.2);
+plot(C,Vreg_bajada,'g--','LineWidth',1.2);
+
+
+%% HISTERESIS MAXIMA
+
+plot([C_Hmax C_Hmax],...
+     [V_Hmax_subida V_Hmax_bajada],...
+     'r-',...
+     'LineWidth',2);
+
+plot(C_Hmax,V_Hmax_subida,...
+     'ro','MarkerSize',7,...
+     'MarkerFaceColor','r');
+
+plot(C_Hmax,V_Hmax_bajada,...
+     'ro','MarkerSize',7,...
+     'MarkerFaceColor','r');
+
+% Texto de la histéresis
+text(C_Hmax+1,...
+     (V_Hmax_subida+V_Hmax_bajada)/2,...
+     sprintf('H_{max} = %.0f mV',H_max*1000),...
+     'FontSize',8,...
+     'FontWeight','bold',...
+     'Color','r');
+
+
+%% EJES
+
+xlabel('Capacitancia (pF)','FontSize',10);
+ylabel('Voltaje (V)','FontSize',10);
+
+title('Curva de histéresis del sensor capacitivo',...
+      'FontSize',12);
+
+
+%% LEYENDA
+
+legend('Subida',...
+       'Bajada',...
+       'Regresión subida',...
+       'Regresión bajada',...
+       'Histéresis máxima',...
+       'Location','southwest',...
+       'FontSize',8);
+
+
+%% CAJA 1: REGRESIONES
+% Esquina superior derecha
+
+texto1 = {
+    sprintf('Subida:')
+    sprintf('V = %.5fC + %.4f',p_subida(1),p_subida(2))
+    sprintf('R^2 = %.4f',R2_subida)
+    sprintf('Sensibilidad = %.5f V/pF',sensibilidad_subida)
+    ''
+    sprintf('Bajada:')
+    sprintf('V = %.5fC + %.4f',p_bajada(1),p_bajada(2))
+    sprintf('R^2 = %.4f',R2_bajada)
+    sprintf('Sensibilidad = %.5f V/pF',sensibilidad_bajada)
+    };
+
+annotation('textbox',...
+    [0.63 0.67 0.32 0.25],...
+    'String',texto1,...
+    'FontSize',7.5,...
+    'BackgroundColor','white',...
+    'EdgeColor',[0.5 0.5 0.5],...
+    'FitBoxToText','off',...
+    'VerticalAlignment','top');
+
+
+%% CAJA 2: HISTERESIS
+
+texto2 = {
+    sprintf('Histeresis máxima = %.0f mV',H_max*1000)
+    sprintf('C = %.0f pF',C_Hmax)
+    sprintf('Subida = %.3f V',V_Hmax_subida)
+    sprintf('Bajada = %.3f V',V_Hmax_bajada)
+    sprintf('Histeresis mínima = %.0f mV',H_min*1000)
+    sprintf('Histeresis promedio = %.1f mV',H_prom*1000)
+    };
+
+annotation('textbox',...
+    [0.63 0.48 0.32 0.17],...
+    'String',texto2,...
+    'FontSize',7.5,...
+    'BackgroundColor','white',...
+    'EdgeColor',[0.5 0.5 0.5],...
+    'FitBoxToText','off',...
+    'VerticalAlignment','top');
+
+
+%% CAJA 3: ERRORES Y LINEALIDAD
+
+texto3 = {
+    sprintf('Linealidad subida = %.2f %%',linealidad_subida)
+    sprintf('Linealidad bajada = %.2f %%',linealidad_bajada)
+    sprintf('Error promedio general = %.2f %%',error_promedio_general_pct)
+    sprintf('Mayor error subida = %.2f %%',...
+            error_max_subida/span*100)
+    sprintf('Mayor error bajada = %.2f %%',...
+            error_max_bajada/span*100)
+    };
+
+annotation('textbox',...
+    [0.63 0.30 0.32 0.14],...
+    'String',texto3,...
+    'FontSize',7.5,...
+    'BackgroundColor','white',...
+    'EdgeColor',[0.5 0.5 0.5],...
+    'FitBoxToText','off',...
+    'VerticalAlignment','top');
+
+
+hold off;
+
+
+%% RESULTADOS EN COMMAND WINDOW
+
+fprintf('\n====================================\n');
+fprintf('       RESULTADOS\n');
+fprintf('====================================\n');
+
+fprintf('\nREGRESION SUBIDA:\n');
+fprintf('V = %.6f C + %.6f\n',p_subida(1),p_subida(2));
+fprintf('R2 = %.4f\n',R2_subida);
+
+fprintf('\nREGRESION BAJADA:\n');
+fprintf('V = %.6f C + %.6f\n',p_bajada(1),p_bajada(2));
+fprintf('R2 = %.4f\n',R2_bajada);
+
+fprintf('\nHISTERESIS:\n');
+fprintf('Minima = %.2f mV\n',H_min*1000);
+fprintf('Maxima = %.2f mV\n',H_max*1000);
+fprintf('Promedio = %.2f mV\n',H_prom*1000);
+
+fprintf('\nPUNTO DE HISTERESIS MAXIMA:\n');
+fprintf('Capacitancia = %.0f pF\n',C_Hmax);
+fprintf('Subida = %.3f V\n',V_Hmax_subida);
+fprintf('Bajada = %.3f V\n',V_Hmax_bajada);
+
+fprintf('\nLINEALIDAD:\n');
+fprintf('Subida = %.2f %%\n',linealidad_subida);
+fprintf('Bajada = %.2f %%\n',linealidad_bajada);
+
+fprintf('\nERRORES:\n');
+fprintf('Promedio general = %.2f %%\n',error_promedio_general_pct);
+fprintf('Mayor subida = %.2f %%\n',error_max_subida/span*100);
+fprintf('Mayor bajada = %.2f %%\n',error_max_bajada/span*100);
+
+fprintf('====================================\n');
+
+
